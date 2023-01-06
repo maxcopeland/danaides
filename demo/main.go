@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 func CreateTextFile(name string, size int) error {
@@ -27,14 +28,23 @@ func CreateTextFile(name string, size int) error {
 
 func main() {
 
-	bucketName := *flag.String("bucketname", "dummy-data-maxcope",
+	var bucketName, bucketDir string
+	var nFiles, fileSize int
+
+	flag.StringVar(&bucketName, "bucketname", "dummy-data-maxcope",
 		"S3 destination bucket name (e.g. \"dummy-data-maxcope\"")
-	bucketDir := *flag.String("bucketdir", "data",
+	flag.StringVar(&bucketDir, "bucketdir", "data",
 		"Destination folder in S3 bucket (e.g. \"data\" or \"tmp/test\"")
-	nFiles := *flag.Int("n", 5, "Number of files to create")
-	fileSize := *flag.Int("size", 1, "Size of each file (in MiB)")
+	flag.IntVar(&nFiles, "n", 10, "Number of files to create")
+	flag.IntVar(&fileSize, "size", 1, "Size of each file (in MiB)")
 
 	flag.Parse()
+
+	//fmt.Printf("bucketname: %s\n", bucketName)
+	//fmt.Printf("buckdir: %s\n", bucketDir)
+	//fmt.Printf("n: %d\n", nFiles)
+	//fmt.Printf("size: %d\n", fileSize)
+	//fmt.Println("ya")
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithSharedConfigProfile("mle"), // Only necessary for non-default profile
@@ -45,10 +55,8 @@ func main() {
 		log.Fatalf("error loading config: %v, %v", cfg, err)
 	}
 
-	client := s3.NewFromConfig(cfg)
-
 	mgr := s3utils.BucketManager{
-		S3Client: client,
+		S3Client: s3.NewFromConfig(cfg),
 	}
 
 	dir, err := os.MkdirTemp("", "dummy_data")
@@ -58,23 +66,33 @@ func main() {
 	}
 	defer os.RemoveAll(dir)
 
+	zeroPadding := len(strconv.Itoa(nFiles)) - 1
+
 	for i := 0; i < nFiles; i++ {
 
-		absPath := filepath.Join(dir, "tmpfile")
+		done := make(chan struct{})
 
-		err = CreateTextFile(absPath, fileSize*1024*1024)
+		go func() {
+			fName := fmt.Sprintf("tmpfile%0*d", zeroPadding, i)
+			absPath := filepath.Join(dir, fName)
 
-		if err != nil {
-			log.Fatal(err)
-		}
+			err = CreateTextFile(absPath, fileSize*1024*1024)
 
-		objectKey := filepath.Join(bucketDir, fmt.Sprintf("test/file%d", i))
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		err = mgr.UploadFile(bucketName, objectKey, absPath)
+			objectKey := filepath.Join(bucketDir, fmt.Sprintf("test/file%0*d", zeroPadding, i))
 
-		if err != nil {
-			log.Fatalf("error uploading %v to s3://%v/%v, %v", absPath, bucketName, objectKey, err)
-		}
+			err = mgr.UploadFile(bucketName, objectKey, absPath)
+			if err != nil {
+				log.Fatalf("error uploading %v to s3://%v/%v, %v", absPath, bucketName, objectKey, err)
+			}
+			done <- struct{}{}
+
+		}()
+
+		<-done
 
 	}
 	fmt.Println("success")

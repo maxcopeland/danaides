@@ -3,6 +3,8 @@ module danaides
 go 1.18
 
 require (
+	github.com/aws/aws-lambda-go v1.36.1 // indirect
+	github.com/aws/aws-sdk-go v1.44.175 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.17.2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.10 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.18.4 // indirect

@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"io"
 	"log"
 	"os"
@@ -104,4 +105,33 @@ func (mgr BucketManager) DownloadLargeOject(bucketName string, objectKey string)
 	}
 
 	return buffer.Bytes(), err
+}
+
+func (mgr BucketManager) ListAllObjects(bucketName string) ([]types.Object, error) {
+
+	var contents []types.Object
+	var err error
+
+	var token *string
+
+	for {
+
+		results, err := mgr.S3Client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
+			Bucket:            aws.String(bucketName),
+			ContinuationToken: token,
+		})
+
+		if err != nil {
+			log.Printf("Can't list objects in bucket %v. Here's where: %v", bucketName, err)
+		} else {
+			contents = append(contents, results.Contents...)
+			token = results.NextContinuationToken
+
+			if !results.IsTruncated {
+				break
+			}
+		}
+	}
+
+	return contents, err
 }
